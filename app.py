@@ -108,7 +108,7 @@ class App:
                 body = body.encode()
             headers = [('Content-Type', content_type), ('Content-Length', str(len(body))),
                        ('Cache-Control', 'no-store'), ('X-Content-Type-Options', 'nosniff'),
-                       ('Referrer-Policy', 'same-origin'), ('X-Frame-Options', 'DENY'),
+                       ('Referrer-Policy', 'strict-origin-when-cross-origin'), ('X-Frame-Options', 'DENY'),
                        ('Permissions-Policy', 'geolocation=(), camera=(), microphone=()'),
                        ('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://tile.openstreetmap.org; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")]
             if not self.local:
