@@ -67,4 +67,3 @@ Open the Render URL and sign in. Within a few seconds it should say **Receiver l
 Local tests cover auth boundaries, cookie flags, CSRF, expired/forged/revoked sessions, login throttling, stale/out-of-order data, input limits, and protected paths. The production server is Gunicorn; the Python development server is not for Internet deployment.
 
 This viewer is for personal situational awareness, not flight navigation or separation.
-
