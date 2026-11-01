@@ -9,6 +9,7 @@ if __name__ == '__main__':
         raise SystemExit('Use a unique password with at least 20 characters.')
     if password != getpass.getpass('Confirm password: '):
         raise SystemExit('Passwords differ.')
-    print('\nSet these in Render environment settings. Treat both as secrets.\n')
+    print('\nSet these in Render environment settings. Treat all of them as secrets.\n')
     print('VIEWER_PASSWORD_HASH=' + password_hash(password))
     print('UPLOAD_TOKEN=' + secrets.token_urlsafe(48))
+    print('SESSION_SECRET=' + secrets.token_urlsafe(48))

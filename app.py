@@ -14,6 +14,8 @@ from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(__file__).parent
 MAX_BODY = 2_000_000
+SESSION_SECONDS = 12 * 3600
+REMEMBER_SECONDS = 30 * 24 * 3600
 
 
 def password_hash(password, salt=None):
@@ -76,8 +78,15 @@ class App:
         self.upload_token = env.get('UPLOAD_TOKEN', '')
         if len(self.upload_token) < 40:
             raise RuntimeError('UPLOAD_TOKEN must contain at least 40 random characters')
-        # Restart invalidates all sessions. No persistent signing secret needed.
-        self.key = secrets.token_bytes(32)
+        secret = env.get('SESSION_SECRET', '')
+        if secret:
+            if len(secret) < 32:
+                raise RuntimeError('SESSION_SECRET must contain at least 32 random characters')
+            # Sessions survive restarts. Changing the password or the secret signs everyone out.
+            self.key = hmac.new(secret.encode(), b'adsb-away session v1|' + self.password.encode(), hashlib.sha256).digest()
+        else:
+            # Without a configured secret, a restart invalidates all sessions.
+            self.key = secrets.token_bytes(32)
         self.lock = threading.Lock()
         self.failures = deque(maxlen=10)
         self.revoked = {}
@@ -85,7 +94,7 @@ class App:
         self.received = 0
 
     def signed_session(self, expires=None):
-        value = f'{int(expires or time.time() + 12*3600)}.{secrets.token_hex(16)}'
+        value = f'{int(expires or time.time() + SESSION_SECONDS)}.{secrets.token_hex(16)}'
         return value + '.' + hmac.new(self.key, value.encode(), hashlib.sha256).hexdigest()
 
     def session(self, environ):
@@ -171,11 +180,12 @@ class App:
                 form = parse_qs(read_body(4096).decode())
                 valid = check_password(form.get('password', [''])[0], self.password)
             except (ValueError, UnicodeError):
-                valid = False
+                form, valid = {}, False
             if not valid:
                 return reply('303 See Other', extra=[('Location', '/login?failed=1')])
-            token = self.signed_session()
-            return reply('303 See Other', extra=[('Location', '/'), ('Set-Cookie', f'session={token}; Path=/; Max-Age=43200; HttpOnly; SameSite=Strict{secure}')])
+            lifetime = REMEMBER_SECONDS if form.get('remember') == ['1'] else SESSION_SECONDS
+            token = self.signed_session(time.time() + lifetime)
+            return reply('303 See Other', extra=[('Location', '/'), ('Set-Cookie', f'session={token}; Path=/; Max-Age={lifetime}; HttpOnly; SameSite=Strict{secure}')])
         if method != 'GET':
             return reply('405 Method Not Allowed', 'Method not allowed')
         if path == '/login':

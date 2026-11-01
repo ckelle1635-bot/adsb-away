@@ -96,6 +96,39 @@ class SecurityTests(unittest.TestCase):
         self.assertNotIn(b'hidden', data['body'])
         self.assertEqual(data['headers']['Cache-Control'], 'no-store')
 
+    def login(self, body):
+        return self.request('/login', 'POST', body, HTTP_ORIGIN='https://example.test')
+
+    def test_remember_device_lasts_thirty_days(self):
+        cookie = self.login(('password=' + PASSWORD + '&remember=1').encode())['headers']['Set-Cookie']
+        self.assertIn('Max-Age=2592000', cookie)
+        token = cookie.split(';')[0].split('=', 1)[1]
+        with patch('app.time.time', return_value=time.time() + 29 * 86400):
+            self.assertEqual(self.request('/api/aircraft', HTTP_COOKIE='session=' + token)['status'], 200)
+        with patch('app.time.time', return_value=time.time() + 31 * 86400):
+            self.assertEqual(self.request('/api/aircraft', HTTP_COOKIE='session=' + token)['status'], 401)
+        for body in ['password=' + PASSWORD, 'password=' + PASSWORD + '&remember=yes']:
+            self.assertIn('Max-Age=43200', self.login(body.encode())['headers']['Set-Cookie'])
+        self.assertIn('failed=1', self.login(b'password=wrong&remember=1')['headers']['Location'])
+
+    def test_session_secret_survives_restart_but_not_password_change(self):
+        secret = 's' * 40
+        config = {'PUBLIC_URL': 'https://example.test', 'VIEWER_PASSWORD_HASH': HASH, 'UPLOAD_TOKEN': TOKEN, 'SESSION_SECRET': secret}
+        token = App(config).signed_session()
+        self.app = App(dict(config))
+        self.assertEqual(self.request('/api/aircraft', HTTP_COOKIE='session=' + token)['status'], 200)
+        self.app = App(dict(config, SESSION_SECRET='t' * 40))
+        self.assertEqual(self.request('/api/aircraft', HTTP_COOKIE='session=' + token)['status'], 401)
+        self.app = App(dict(config, VIEWER_PASSWORD_HASH=password_hash('another-long-password-for-tests')))
+        self.assertEqual(self.request('/api/aircraft', HTTP_COOKIE='session=' + token)['status'], 401)
+        with self.assertRaises(RuntimeError):
+            App(dict(config, SESSION_SECRET='short'))
+
+    def test_without_session_secret_restart_signs_out(self):
+        token = self.app.signed_session()
+        self.setUp()
+        self.assertEqual(self.request('/api/aircraft', HTTP_COOKIE='session=' + token)['status'], 401)
+
     def test_production_requires_https_and_secrets(self):
         for config in [{}, {'PUBLIC_URL': 'http://example.test'}, {'PUBLIC_URL': 'https://example.test'}]:
             with self.assertRaises(RuntimeError):
