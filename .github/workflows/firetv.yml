@@ -1,0 +1,66 @@
+name: Fire TV app
+
+on:
+  push:
+    paths:
+      - 'firetv/**'
+      - '.github/workflows/firetv.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: firetv-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Prepare signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.FIRETV_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.FIRETV_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/release.p12"
+            echo "FIRETV_KEYSTORE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
+          else
+            echo "::warning::FIRETV_KEYSTORE_BASE64 / FIRETV_KEYSTORE_PASSWORD are not set. Building with a temporary debug key; the APK is attached to this run only and not published."
+          fi
+
+      - name: Build APK
+        env:
+          FIRETV_KEYSTORE_PASSWORD: ${{ secrets.FIRETV_KEYSTORE_PASSWORD }}
+          FIRETV_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          gradle -p firetv --no-daemon assembleRelease
+          cp firetv/app/build/outputs/apk/release/app-release.apk home-airspace.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: home-airspace-apk
+          path: home-airspace.apk
+
+      - name: Publish to the firetv-latest release
+        if: env.FIRETV_KEYSTORE != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view firetv-latest >/dev/null 2>&1; then
+            gh release create firetv-latest --title "Home Airspace for Fire TV" --latest=false --target "$GITHUB_SHA" \
+              --notes "Install on a Fire TV with the Downloader app. See firetv/README.md. The APK contains no site address, password, or keys."
+          fi
+          gh release upload firetv-latest home-airspace.apk --clobber

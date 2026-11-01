@@ -35,6 +35,9 @@ class SecurityTests(unittest.TestCase):
         for path, status in [('/api/aircraft', 401), ('/', 303), ('/static/app.js', 303), ('/static/leaflet.js', 303)]:
             self.assertEqual(self.request(path)['status'], status)
         self.assertEqual(self.request('/api/aircraft', HTTP_AUTHORIZATION='Bearer ' + TOKEN)['status'], 401)
+        # Only the sign-in page's assets are public.
+        for path in ['/login', '/static/style.css', '/static/tvnav.js']:
+            self.assertEqual(self.request(path)['status'], 200)
 
     def test_upload_requires_distinct_token(self):
         self.assertEqual(self.ingest(token='wrong')['status'], 401)

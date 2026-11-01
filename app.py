@@ -192,6 +192,8 @@ class App:
             return reply('200 OK', (ROOT / 'static/login.html').read_bytes(), 'text/html; charset=utf-8')
         if path == '/static/style.css':
             return reply('200 OK', (ROOT / 'static/style.css').read_bytes(), 'text/css')
+        if path == '/static/tvnav.js':
+            return reply('200 OK', (ROOT / 'static/tvnav.js').read_bytes(), 'application/javascript')
         if not self.session(environ):
             if path.startswith('/api/'):
                 return reply('401 Unauthorized', 'Login required')

@@ -60,6 +60,8 @@ Open the Render URL and sign in. Within a few seconds it should say **Receiver l
 
 TV mode uses larger text and markers, keeps callsign labels on the map, hides the search box, and lets you move through the aircraft list with Up/Down on the remote; landing on a row shows that aircraft on the map. After two minutes without input it zooms back out to show all aircraft. The choice is remembered on that device; turn it off with the **Exit TV mode** button or `/?tv=0`. Any browser can use the **TV mode** button.
 
+Prefer an app? `firetv/` contains a Fire TV app that opens the site full screen from its own home-screen tile, keeps the screen on, and is built by GitHub Actions. See [firetv/README.md](firetv/README.md).
+
 ## Security and privacy
 
 - TLS is required for the Render origin. Upload redirects are rejected, so credentials cannot be forwarded to another endpoint.

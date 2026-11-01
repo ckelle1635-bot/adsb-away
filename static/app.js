@@ -101,6 +101,7 @@ async function keepAwake() {
 }
 function applyMode() {
   document.body.classList.toggle('tv', tv);
+  window.tvNav.enabled = tv;
   $('tv-toggle').textContent = tv ? 'Exit TV mode' : 'TV mode';
   $('tv-toggle').setAttribute('aria-pressed', String(tv));
   for (const marker of markers.values()) map.removeLayer(marker);
@@ -110,19 +111,9 @@ function applyMode() {
   setTimeout(() => { map.invalidateSize(); render(); if (aircraft.some(positioned)) fit(); }, 0);
 }
 
-// Remote control: Up/Down moves through the aircraft list; landing on a row shows it on the map.
-document.addEventListener('keydown', e => {
-  lastInput = Date.now();
-  if (!tv || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return;
-  const row = document.activeElement?.closest?.('.aircraft');
-  const rows = [...document.querySelectorAll('#aircraft .aircraft')];
-  if (!rows.length) return;
-  let next;
-  if (row) next = e.key === 'ArrowDown' ? row.nextElementSibling : row.previousElementSibling;
-  else if (e.key === 'ArrowDown' && document.activeElement?.closest?.('.toolbar, header')) next = rows[0];
-  if (next?.classList.contains('aircraft')) { e.preventDefault(); next.focus(); next.scrollIntoView({block: 'nearest'}); }
-  else if (row && e.key === 'ArrowUp') { e.preventDefault(); $('fit').focus(); }
-});
+// Remote control: arrow keys move between buttons and aircraft (static/tvnav.js);
+// landing on an aircraft row shows it on the map.
+document.addEventListener('keydown', () => { lastInput = Date.now(); });
 document.addEventListener('pointerdown', () => { lastInput = Date.now(); });
 $('aircraft').addEventListener('focusin', e => {
   const hex = e.target.closest?.('.aircraft')?.dataset.hex;
