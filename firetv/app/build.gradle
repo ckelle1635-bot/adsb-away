@@ -1,0 +1,51 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Release signing comes from the CI secrets (see firetv/README.md). Without them the
+// build falls back to a throwaway debug key, which is fine for testing but cannot
+// update an installed copy signed with the real key.
+def keystorePath = System.getenv('FIRETV_KEYSTORE')
+def versionNumber = (System.getenv('FIRETV_VERSION_CODE') ?: '1').toInteger()
+
+android {
+    namespace 'io.github.ckelle1635bot.homeairspace'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'io.github.ckelle1635bot.homeairspace'
+        minSdk 22
+        targetSdk 35
+        versionCode versionNumber
+        versionName "1.0.${versionNumber}"
+    }
+
+    signingConfigs {
+        release {
+            if (keystorePath) {
+                storeFile file(keystorePath)
+                storeType 'pkcs12'
+                storePassword System.getenv('FIRETV_KEYSTORE_PASSWORD')
+                keyAlias 'homeairspace'
+                keyPassword System.getenv('FIRETV_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig keystorePath ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+}
