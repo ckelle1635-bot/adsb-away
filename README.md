@@ -62,6 +62,15 @@ TV mode uses larger text and markers, keeps callsign labels on the map, hides th
 
 Prefer an app? `firetv/` contains a Fire TV app that opens the site full screen from its own home-screen tile, keeps the screen on, and is built by GitHub Actions. See [firetv/README.md](firetv/README.md).
 
+## FAA airspace overlays
+
+Two toolbar buttons add FAA aeronautical data to the map. Both are remembered per device and work with the TV remote.
+
+- **Airspace**: Class B (solid blue), C (magenta) and D (dashed blue) boundaries from the FAA's [Class Airspace](https://adds-faa.opendata.arcgis.com/) data, labelled like a sectional: ceiling/floor in hundreds of feet MSL (`125/25`), `SFC` for surface, and `[33]` for a Class D ceiling. Labels appear from zoom level 9. The server fetches 2x2 degree areas from the FAA as the map moves and caches each for a day, so viewers (including the TV) only talk to this site.
+- **Sectional**: the FAA VFR sectional chart, 75% opaque, under the aircraft. The FAA publishes these tiles only for zoom levels 8-12, so the chart hides when zoomed further out; closer zooms enlarge level 12. The tiles load directly from the FAA's map server (`tiles.arcgis.com`), which therefore sees the viewer's IP address and map area.
+
+The FAA republishes both on its 56-day chart cycle. Like the rest of this viewer, they are for situational awareness, not navigation.
+
 ## Security and privacy
 
 - TLS is required for the Render origin. Upload redirects are rejected, so credentials cannot be forwarded to another endpoint.

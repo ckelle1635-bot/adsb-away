@@ -10,12 +10,94 @@ import threading
 import time
 from collections import deque
 from http.cookies import SimpleCookie
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
+import urllib.request
 
 ROOT = Path(__file__).parent
 MAX_BODY = 2_000_000
 SESSION_SECONDS = 12 * 3600
 REMEMBER_SECONDS = 30 * 24 * 3600
+
+# FAA Aeronautical Information Services, Class Airspace (published every eight weeks).
+AIRSPACE_URL = 'https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/Class_Airspace/FeatureServer/0/query'
+AIRSPACE_CELL = 2              # degrees; the map asks for 2x2 degree cells
+AIRSPACE_TTL = 24 * 3600       # cache each cell for a day
+AIRSPACE_CACHE_CELLS = 64
+AIRSPACE_PAGE = 1000
+AIRSPACE_MAX_PAGES = 4
+AIRSPACE_MAX_BYTES = 8_000_000
+AIRSPACE_CLASSES = ('B', 'C', 'D')
+
+
+def fetch_json(url, timeout=15):
+    request = urllib.request.Request(url, headers={'User-Agent': 'HomeAirspace/1.0', 'Accept': 'application/json'})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        body = response.read(AIRSPACE_MAX_BYTES + 1)
+    if len(body) > AIRSPACE_MAX_BYTES:
+        raise ValueError('Airspace response too large')
+    return json.loads(body)
+
+
+def parse_cell(text):
+    """'32,-86' -> (32, -86): the south-west corner of a 2x2 degree cell."""
+    try:
+        lat, lon = (int(part) for part in text.split(','))
+    except (ValueError, AttributeError):
+        raise ValueError('Invalid cell')
+    if lat % AIRSPACE_CELL or lon % AIRSPACE_CELL or not (-90 <= lat <= 90 - AIRSPACE_CELL) or not (-180 <= lon <= 180 - AIRSPACE_CELL):
+        raise ValueError('Invalid cell')
+    return lat, lon
+
+
+def clean_ring(ring):
+    points = []
+    for point in ring if isinstance(ring, list) else []:
+        if not (isinstance(point, list) and len(point) >= 2):
+            return None
+        lon, lat = point[0], point[1]
+        if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in (lon, lat)):
+            return None
+        if not (-180 <= lon <= 180 and -90 <= lat <= 90):
+            return None
+        points.append([round(lon, 5), round(lat, 5)])
+    return points if len(points) >= 4 else None
+
+
+def clean_airspace(collection):
+    """Keep only Class B/C/D polygons with the few fields the map shows."""
+    if not isinstance(collection, dict) or not isinstance(collection.get('features'), list):
+        raise ValueError('Expected GeoJSON features')
+    features = []
+    for item in collection['features']:
+        if not isinstance(item, dict):
+            continue
+        props, geometry = item.get('properties') or {}, item.get('geometry') or {}
+        if not isinstance(props, dict) or not isinstance(geometry, dict) or props.get('CLASS') not in AIRSPACE_CLASSES:
+            continue
+        kind, coords = geometry.get('type'), geometry.get('coordinates')
+        polygons = [coords] if kind == 'Polygon' else coords if kind == 'MultiPolygon' else None
+        if not isinstance(polygons, list):
+            continue
+        cleaned = []
+        for polygon in polygons:
+            rings = [clean_ring(ring) for ring in polygon] if isinstance(polygon, list) else [None]
+            if rings and all(rings):
+                cleaned.append(rings)
+        if not cleaned:
+            continue
+        def value(key):
+            v = props.get(key)
+            return v if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) else None
+        def text(key):
+            v = props.get(key)
+            return v[:80] if isinstance(v, str) else None
+        oid = item.get('id', props.get('OBJECTID'))
+        features.append({'type': 'Feature', 'id': oid if isinstance(oid, int) and not isinstance(oid, bool) else None,
+                         'geometry': {'type': 'MultiPolygon', 'coordinates': cleaned},
+                         'properties': {'class': props['CLASS'], 'name': text('NAME'), 'ident': text('IDENT'),
+                                        'upper': value('UPPER_VAL'), 'upper_code': text('UPPER_CODE'),
+                                        'lower': value('LOWER_VAL'), 'lower_code': text('LOWER_CODE')}})
+    return {'type': 'FeatureCollection', 'features': features}
 
 
 def password_hash(password, salt=None):
@@ -92,6 +174,38 @@ class App:
         self.revoked = {}
         self.feed = None
         self.received = 0
+        self.airspace = {}
+        self.fetch_json = fetch_json
+
+    def airspace_cell(self, cell):
+        """Class B/C/D airspace for one cell, fetched from the FAA and cached for a day."""
+        now = time.time()
+        with self.lock:
+            cached = self.airspace.get(cell)
+            if cached and now - cached[0] < AIRSPACE_TTL:
+                return cached[1]
+        lat, lon = cell
+        base = {'where': "CLASS IN ('B','C','D')", 'geometry': f'{lon},{lat},{lon + AIRSPACE_CELL},{lat + AIRSPACE_CELL}',
+                'geometryType': 'esriGeometryEnvelope', 'inSR': '4326', 'spatialRel': 'esriSpatialRelIntersects',
+                'outFields': 'OBJECTID,CLASS,NAME,IDENT,UPPER_VAL,UPPER_CODE,LOWER_VAL,LOWER_CODE',
+                'returnGeometry': 'true', 'outSR': '4326', 'geometryPrecision': '5', 'maxAllowableOffset': '0.0003',
+                'orderByFields': 'OBJECTID', 'resultRecordCount': str(AIRSPACE_PAGE), 'f': 'geojson'}
+        features, deadline = [], now + 25
+        for page in range(AIRSPACE_MAX_PAGES):
+            remaining = deadline - time.time()
+            if remaining < 2:
+                raise ValueError('FAA airspace service too slow')
+            data = self.fetch_json(AIRSPACE_URL + '?' + urlencode(dict(base, resultOffset=str(page * AIRSPACE_PAGE))), timeout=min(15, remaining))
+            features += clean_airspace(data)['features']
+            more = data.get('exceededTransferLimit') or (data.get('properties') or {}).get('exceededTransferLimit')
+            if not more:
+                break
+        body = json.dumps({'type': 'FeatureCollection', 'features': features}, separators=(',', ':')).encode()
+        with self.lock:
+            self.airspace[cell] = (now, body)
+            while len(self.airspace) > AIRSPACE_CACHE_CELLS:
+                del self.airspace[min(self.airspace, key=lambda k: self.airspace[k][0])]
+        return body
 
     def signed_session(self, expires=None):
         value = f'{int(expires or time.time() + SESSION_SECONDS)}.{secrets.token_hex(16)}'
@@ -119,7 +233,7 @@ class App:
                        ('Cache-Control', 'no-store'), ('X-Content-Type-Options', 'nosniff'),
                        ('Referrer-Policy', 'strict-origin-when-cross-origin'), ('X-Frame-Options', 'DENY'),
                        ('Permissions-Policy', 'geolocation=(), camera=(), microphone=()'),
-                       ('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://tile.openstreetmap.org; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")]
+                       ('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://tile.openstreetmap.org https://tiles.arcgis.com; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")]
             if not self.local:
                 headers.append(('Strict-Transport-Security', 'max-age=31536000'))
             start_response(code, headers + list(extra))
@@ -198,6 +312,16 @@ class App:
             if path.startswith('/api/'):
                 return reply('401 Unauthorized', 'Login required')
             return reply('303 See Other', extra=[('Location', '/login')])
+        if path == '/api/airspace':
+            try:
+                cell = parse_cell(parse_qs(environ.get('QUERY_STRING', '')).get('cell', [''])[0])
+            except ValueError:
+                return reply('400 Bad Request', 'Invalid cell')
+            try:
+                body = self.airspace_cell(cell)
+            except (OSError, ValueError, UnicodeError, RecursionError):
+                return reply('502 Bad Gateway', 'FAA airspace data is unavailable right now')
+            return reply('200 OK', body, 'application/json')
         if path == '/api/aircraft':
             with self.lock:
                 age = time.time() - self.received if self.received else None
@@ -209,6 +333,7 @@ class App:
             return reply('200 OK', json.dumps(result), 'application/json')
         files = {'/': ('index.html', 'text/html; charset=utf-8'),
                  '/static/app.js': ('app.js', 'application/javascript'),
+                 '/static/airspace.js': ('airspace.js', 'application/javascript'),
                  '/static/leaflet.js': ('leaflet.js', 'application/javascript'),
                  '/static/leaflet.css': ('leaflet.css', 'text/css')}
         if path in files:

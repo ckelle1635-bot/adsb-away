@@ -15,6 +15,8 @@ if (param !== null) stored.set('tv', param === '0' ? '0' : '1');
 let tv = stored.get('tv') === '1';
 // The "On your radar" list can be hidden to give the map the whole width; remembered per device.
 let showList = stored.get('list') !== '0';
+// FAA airspace outlines and sectional chart overlays (static/airspace.js).
+window.setupOverlays(map, stored);
 
 function fit() {
   const points = aircraft.filter(positioned).map(a => [a.lat, a.lon]);
