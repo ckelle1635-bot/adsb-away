@@ -58,7 +58,7 @@ Open the Render URL and sign in. Within a few seconds it should say **Receiver l
 3. Sign in and tick **Remember this device for 30 days**. The password is long; the Amazon Fire TV phone app gives you a phone keyboard for typing it.
 4. Stop the screensaver covering the map: **Settings → Display & Sounds → Screen Saver → Start Time → Never**. The page also asks the browser to keep the screen awake while it is visible.
 
-TV mode uses larger text and markers, keeps callsign labels on the map, hides the search box, and lets you move through the aircraft list with Up/Down on the remote; landing on a row shows that aircraft on the map. After two minutes without input it zooms back out to show all aircraft. The choice is remembered on that device; turn it off with the **Exit TV mode** button or `/?tv=0`. Any browser can use the **TV mode** button.
+TV mode uses larger text and markers, keeps callsign labels on the map, hides the search box, and lets you move through the aircraft list with Up/Down on the remote; landing on a row shows that aircraft on the map. After two minutes without input it zooms back out to show all aircraft. The choice is remembered on that device; turn it off with the **Exit TV mode** button or `/?tv=0`. Any browser can use the **TV mode** button. The **Hide list** / **Show list** button hides the "On your radar" list so the map fills the width; it is also remembered per device and works in TV mode.
 
 Prefer an app? `firetv/` contains a Fire TV app that opens the site full screen from its own home-screen tile, keeps the screen on, and is built by GitHub Actions. See [firetv/README.md](firetv/README.md).
 

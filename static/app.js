@@ -13,6 +13,8 @@ const stored = {get: k => { try { return localStorage.getItem(k); } catch (_) { 
 const param = new URLSearchParams(location.search).get('tv');
 if (param !== null) stored.set('tv', param === '0' ? '0' : '1');
 let tv = stored.get('tv') === '1';
+// The "On your radar" list can be hidden to give the map the whole width; remembered per device.
+let showList = stored.get('list') !== '0';
 
 function fit() {
   const points = aircraft.filter(positioned).map(a => [a.lat, a.lon]);
@@ -99,6 +101,12 @@ async function keepAwake() {
     wakeLock.addEventListener('release', () => { wakeLock = null; });
   } catch (_) { wakeLock = null; }
 }
+function applyList() {
+  document.body.classList.toggle('no-list', !showList);
+  $('list-toggle').textContent = showList ? 'Hide list' : 'Show list';
+  $('list-toggle').setAttribute('aria-expanded', String(showList));
+  setTimeout(() => map.invalidateSize(), 0);
+}
 function applyMode() {
   document.body.classList.toggle('tv', tv);
   window.tvNav.enabled = tv;
@@ -125,12 +133,14 @@ $('aircraft').addEventListener('focusin', e => {
 setInterval(() => { if (tv && Date.now() - lastInput > 120000) { selected = null; fit(); render(); lastInput = Date.now(); } }, 30000);
 
 $('fit').onclick = fit; $('search').oninput = render;
+$('list-toggle').onclick = () => { showList = !showList; stored.set('list', showList ? '1' : '0'); applyList(); };
 $('tv-toggle').onclick = () => { tv = !tv; stored.set('tv', tv ? '1' : '0'); applyMode(); };
 setInterval(() => { if (lastSuccess && Date.now() - lastSuccess > 30000) offline('Connection lost · data is stale'); }, 1000);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && lastSuccess && Date.now() - lastSuccess > 30000) offline('Reconnecting…');
   keepAwake();
 });
+applyList();
 applyMode();
 if (tv) $('fit').focus();
 poll();
