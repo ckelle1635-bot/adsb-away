@@ -1,0 +1,37 @@
+# Access-code front door for a private Render service (God's Eye View).
+#
+# Every request must carry the access code (browser sign-in box: user "guest",
+# password = the code) before it is passed to the private service. Settings come
+# from Render environment variables; see gatekeeper/README.md.
+#   UPSTREAM   private service address, e.g. chucks-gev-private:4173
+#   GATE_HASH  bcrypt hash of GATE_CODE, made by start.sh at boot
+#   GATE_USER  sign-in name (default: guest)
+{
+	admin off
+	persist_config off
+	# Render terminates HTTPS in front of this service.
+	auto_https off
+}
+
+:{$PORT:10000} {
+	# Unauthenticated health check for Render. Reveals nothing about the app.
+	handle /gatekeeper-health {
+		respond "ok" 200
+	}
+
+	handle {
+		basic_auth bcrypt "Chuck's God's Eye View" {
+			{$GATE_USER:guest} {$GATE_HASH}
+		}
+
+		# Host is passed through unchanged (Caddy's default), so the app sees the
+		# public hostname; list it in the app's GEV_ALLOWED_HOSTS. Public Render URLs
+		# are always HTTPS, which the app needs to match the browser's Origin.
+		# WebSockets and streamed responses are proxied automatically.
+		reverse_proxy {$UPSTREAM} {
+			header_up X-Forwarded-Proto https
+			# The app never needs the visitor's sign-in header.
+			header_up -Authorization
+		}
+	}
+}
