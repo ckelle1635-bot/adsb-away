@@ -14,8 +14,8 @@ if [ "${#GATE_CODE}" -lt 12 ]; then
 	exit 1
 fi
 
-GATE_HASH="$(caddy hash-password --plaintext "$GATE_CODE")"
+GATE_HASH="$(/usr/local/bin/caddy hash-password --plaintext "$GATE_CODE")"
 export GATE_HASH
 unset GATE_CODE
 
-exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+exec /usr/local/bin/caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
