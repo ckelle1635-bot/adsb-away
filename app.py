@@ -29,6 +29,23 @@ AIRSPACE_MAX_BYTES = 8_000_000
 AIRSPACE_CLASSES = ('B', 'C', 'D')
 
 
+def parse_home_view(text):
+    """HOME_VIEW='lat,lon,zoom' (e.g. '33.47,-82.50,10') -> [lat, lon, zoom], or None if unset.
+
+    Kept in Render's settings rather than the repository, so the receiver's area
+    is only sent to signed-in viewers."""
+    text = (text or '').strip()
+    if not text:
+        return None
+    try:
+        lat, lon, zoom = (float(part) for part in text.split(','))
+    except ValueError:
+        raise RuntimeError('HOME_VIEW must be "latitude,longitude,zoom", e.g. 33.47,-82.50,10')
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180 and 3 <= zoom <= 16):
+        raise RuntimeError('HOME_VIEW is out of range: latitude -90..90, longitude -180..180, zoom 3..16')
+    return [round(lat, 4), round(lon, 4), round(zoom, 1)]
+
+
 def fetch_json(url, timeout=15):
     request = urllib.request.Request(url, headers={'User-Agent': 'HomeAirspace/1.0', 'Accept': 'application/json'})
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -158,6 +175,7 @@ class App:
         if not self.password.startswith('pbkdf2_sha256$600000$'):
             raise RuntimeError('Configure VIEWER_PASSWORD_HASH using configure.py')
         self.upload_token = env.get('UPLOAD_TOKEN', '')
+        self.home = parse_home_view(env.get('HOME_VIEW', ''))
         if len(self.upload_token) < 40:
             raise RuntimeError('UPLOAD_TOKEN must contain at least 40 random characters')
         secret = env.get('SESSION_SECRET', '')
@@ -329,7 +347,7 @@ class App:
                 online = age is not None and age < 30 and source_age < 30
                 result = {'online': online, 'age': age, 'source_age': source_age,
                           'aircraft': self.feed['aircraft'] if online else [],
-                          'now': self.feed['now'] if self.feed else None}
+                          'now': self.feed['now'] if self.feed else None, 'home': self.home}
             return reply('200 OK', json.dumps(result), 'application/json')
         files = {'/': ('index.html', 'text/html; charset=utf-8'),
                  '/static/app.js': ('app.js', 'application/javascript'),
