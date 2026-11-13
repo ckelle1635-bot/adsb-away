@@ -13,7 +13,7 @@ Create a **Python web service**, one instance, from this repository.
 - `VIEWER_PASSWORD_HASH`: generated below
 - `UPLOAD_TOKEN`: generated below
 - `SESSION_SECRET` (recommended): generated below. Keeps viewers signed in across restarts and deploys
-- `HOME_VIEW` (optional): where the map starts, as `latitude,longitude,zoom`, for example `33.47,-82.50,10` (zoom 8 shows a region, 10 a county, 12 a town). TV mode returns here after two minutes without remote input, and a **Home** button appears next to **Fit aircraft**. Without it, the map fits all aircraft instead. It is kept in Render, not this public repository, and only sent to signed-in viewers
+- `HOME_VIEW` (optional): where the map starts, as `latitude,longitude,zoom`, for example `33.47,-82.50,10` (zoom 8 shows a region, 10 a county, 12 a town). TV mode returns here after 30 minutes without remote input, and a **Home** button appears next to **Fit aircraft**. Without it, the map fits all aircraft instead. It is kept in Render, not this public repository, and only sent to signed-in viewers
 
 Run `python configure.py` on a trusted computer. Choose a unique password of at least 20 characters and store it in a password manager. Copy the generated hash, upload token, and session secret directly into Render's environment settings; do not commit or paste them into chat. Deploy after saving. Leave `LOCAL_DEV` unset in production.
 
@@ -59,7 +59,7 @@ Open the Render URL and sign in. Within a few seconds it should say **Receiver l
 3. Sign in and tick **Remember this device for 30 days**. The password is long; the Amazon Fire TV phone app gives you a phone keyboard for typing it.
 4. Stop the screensaver covering the map: **Settings → Display & Sounds → Screen Saver → Start Time → Never**. The page also asks the browser to keep the screen awake while it is visible.
 
-TV mode uses larger text and markers, keeps callsign labels on the map, hides the search box, and lets you move through the aircraft list with Up/Down on the remote; landing on a row shows that aircraft on the map. After two minutes without input it returns to your `HOME_VIEW`, or zooms out to show all aircraft if none is set. The choice is remembered on that device; turn it off with the **Exit TV mode** button or `/?tv=0`. Any browser can use the **TV mode** button. The **Hide list** / **Show list** button hides the "On your radar" list so the map fills the width; it is also remembered per device and works in TV mode.
+TV mode uses larger text and markers, keeps callsign labels on the map, hides the search box, and lets you move through the aircraft list with Up/Down on the remote; landing on a row shows that aircraft on the map. After 30 minutes without input it returns to your `HOME_VIEW`, or zooms out to show all aircraft if none is set. The choice is remembered on that device; turn it off with the **Exit TV mode** button or `/?tv=0`. Any browser can use the **TV mode** button. The **Hide list** / **Show list** button hides the "On your radar" list so the map fills the width; it is also remembered per device and works in TV mode.
 
 Prefer an app? `firetv/` contains a Fire TV app that opens the site full screen from its own home-screen tile, keeps the screen on, and is built by GitHub Actions. See [firetv/README.md](firetv/README.md).
 
