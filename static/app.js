@@ -3,6 +3,7 @@ const $ = id => document.getElementById(id);
 const map = L.map('map').setView([33.5, -83.5], 7);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
 const markers = new Map();
+let home = null; // [lat, lon, zoom] from the server's HOME_VIEW setting, if set
 let aircraft = [], selected = null, fitted = false, lastSuccess = 0, live = false, lastInput = Date.now(), wakeLock = null;
 const fmt = (v, unit) => typeof v === 'number' ? Math.round(v).toLocaleString() + unit : (v === 'ground' ? 'Ground' : '—');
 const callsign = a => a.flight || a.r || a.hex;
@@ -21,6 +22,10 @@ window.setupOverlays(map, stored);
 function fit() {
   const points = aircraft.filter(positioned).map(a => [a.lat, a.lon]);
   if (points.length) map.fitBounds(points, {padding: [35, 35], maxZoom: 11});
+}
+// The home view (if configured) is where the map starts and where TV mode returns when idle.
+function goHome() {
+  if (home) map.setView([home[0], home[1]], home[2]); else fit();
 }
 function choose(a) {
   selected = a.hex;
@@ -84,6 +89,10 @@ async function poll() {
     if (response.status === 401) { location.assign('/login'); return; }
     if (!response.ok) throw new Error('Feed unavailable');
     const data = await response.json(); lastSuccess = Date.now();
+    if (Array.isArray(data.home) && !home) {
+      home = data.home; $('home').hidden = false;
+      if (!fitted) { goHome(); fitted = true; }
+    }
     $('updated').textContent = data.now ? 'Receiver update ' + new Date(data.now * 1000).toLocaleTimeString() : 'No updates received yet';
     if (!data.online) offline(data.now ? 'Feed offline · data is stale' : 'Waiting for receiver');
     else {
@@ -131,10 +140,10 @@ $('aircraft').addEventListener('focusin', e => {
   const a = aircraft.find(x => x.hex === hex);
   if (a) choose(a);
 });
-// In TV mode, after two minutes without remote input, zoom back out to show all aircraft.
-setInterval(() => { if (tv && Date.now() - lastInput > 120000) { selected = null; fit(); render(); lastInput = Date.now(); } }, 30000);
+// In TV mode, after two minutes without remote input, return to the home view (or show all aircraft).
+setInterval(() => { if (tv && Date.now() - lastInput > 120000) { selected = null; goHome(); render(); lastInput = Date.now(); } }, 30000);
 
-$('fit').onclick = fit; $('search').oninput = render;
+$('fit').onclick = fit; $('home').onclick = () => { selected = null; goHome(); render(); }; $('search').oninput = render;
 $('list-toggle').onclick = () => { showList = !showList; stored.set('list', showList ? '1' : '0'); applyList(); };
 $('tv-toggle').onclick = () => { tv = !tv; stored.set('tv', tv ? '1' : '0'); applyMode(); };
 setInterval(() => { if (lastSuccess && Date.now() - lastSuccess > 30000) offline('Connection lost · data is stale'); }, 1000);
