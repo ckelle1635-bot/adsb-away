@@ -140,8 +140,9 @@ $('aircraft').addEventListener('focusin', e => {
   const a = aircraft.find(x => x.hex === hex);
   if (a) choose(a);
 });
-// In TV mode, after two minutes without remote input, return to the home view (or show all aircraft).
-setInterval(() => { if (tv && Date.now() - lastInput > 120000) { selected = null; goHome(); render(); lastInput = Date.now(); } }, 30000);
+// In TV mode, after 30 minutes without remote input, return to the home view (or show all aircraft).
+const IDLE_RESET_MS = 30 * 60 * 1000;
+setInterval(() => { if (tv && Date.now() - lastInput > IDLE_RESET_MS) { selected = null; goHome(); render(); lastInput = Date.now(); } }, 30000);
 
 $('fit').onclick = fit; $('home').onclick = () => { selected = null; goHome(); render(); }; $('search').oninput = render;
 $('list-toggle').onclick = () => { showList = !showList; stored.set('list', showList ? '1' : '0'); applyList(); };
